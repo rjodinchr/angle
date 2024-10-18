@@ -646,7 +646,3 @@ if (angle_standalone || build_with_chromium || build_angle_end2end_tests_aosp) {
   }
 }
 
-if (angle_enable_cl) {
-  # need the llvm build flags
-  import("$angle_clspv_dir/gn/build/llvm_buildflags.gni")
-}

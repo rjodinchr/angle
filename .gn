@@ -55,3 +55,5 @@ default_args = {
 }
 
 no_check_targets = [ "third_party/dawn/*" ]
+
+secondary_source = "//build_overrides/secondary"

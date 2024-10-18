@@ -8,8 +8,8 @@ import("//gni/angle.gni")
 # LLVM source location
 clspv_llvm_dir = angle_llvm_dir
 
-# clspv gn dir location
-clspv_gn_dir = "//third_party/clspv/gn"
+# clspv dir location
+clspv_dir = "third_party/clspv/src"
 
 # SPIRV tools
 spirv_tools_dir = angle_spirv_tools_dir

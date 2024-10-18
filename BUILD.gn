@@ -120,7 +120,7 @@ if (angle_build_all) {
     }
     if (angle_enable_cl && angle_enable_vulkan) {
       # OpenCL through Vulkan in ANGLE requires clspv for online compiler
-      deps += [ "$angle_clspv_dir:clspv" ]
+      deps += [ "$angle_clspv_dir/lib:clspv_passes" ]
     }
     if (angle_build_mesa) {
       deps += [ "$angle_root/third_party/mesa" ]
