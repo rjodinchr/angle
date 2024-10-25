@@ -20,6 +20,7 @@ ROOT_TARGETS = [
     "//:libGLESv2",
     "//:libGLESv1_CM",
     "//:libEGL",
+    "//third_party/clvk/src:OpenCL",
 ]
 
 END2END_TEST_TARGET = "//src/tests:angle_end2end_tests__library"
@@ -136,7 +137,7 @@ def write_blueprint(output, target_type, values):
 
 
 def gn_target_to_blueprint_target(target, target_info):
-    if 'output_name' in target_info:
+    if 'output_name' in target_info and not target.endswith(")"):
         return target_info['output_name']
 
     if target_info.get('type') == 'shared_library':
@@ -146,7 +147,7 @@ def gn_target_to_blueprint_target(target, target_info):
 
     # Split the gn target name (in the form of //gn_file_path:target_name) into gn_file_path and
     # target_name
-    match = re.match(r"^//([a-zA-Z0-9\-\+_/]*):([a-zA-Z0-9\-\+_.]+)$", target)
+    match = re.match(r"^//([a-zA-Z0-9\-\+_/]*):([a-zA-Z0-9\-\+_./:\(\)]+)$", target)
     assert match is not None, target
 
     gn_file_path = match.group(1)
@@ -154,7 +155,8 @@ def gn_target_to_blueprint_target(target, target_info):
     assert len(target_name) > 0
 
     # Clean up the gn file path to be a valid blueprint target name.
-    gn_file_path = gn_file_path.replace("/", "_").replace(".", "_").replace("-", "_")
+    gn_file_path = gn_file_path.replace("/", "_").replace(".", "_").replace("-", "_").replace(":", "_").replace("(", "_").replace(")", "_")
+    target_name = target_name.replace("/", "_").replace(".", "_").replace("-", "_").replace(":", "_").replace("(", "_").replace(")", "_")
 
     # Generate a blueprint target name by merging the gn path and target so each target is unique.
     # Prepend the 'angle' prefix to all targets in the root path (empty gn_file_path).
@@ -175,6 +177,7 @@ def remap_gn_path(path):
     remap_folders = [
         ('out/Android/gen/angle/', ''),
         ('out/Android/gen/', ''),
+        ('out/Android/clang_x64/gen/', ''),
     ]
 
     remapped_path = path
@@ -236,6 +239,10 @@ third_party_target_allowlist = [
     '//third_party/vulkan-utility-libraries/src',
     '//third_party/vulkan-validation-layers/src',
     '//third_party/vulkan_memory_allocator',
+
+    '//third_party/clspv/src',
+    '//third_party/llvm/src',
+    '//third_party/clvk',
 ]
 
 include_blocklist = [
@@ -269,11 +276,17 @@ def gn_deps_to_blueprint_deps(abi, target, build_info):
     if 'deps' not in target_info:
         return static_libs, defaults
 
+    host_target = "(" in target
+
     for dep in target_info['deps']:
         if dep not in target_blockist and (not dep.startswith('//third_party') or any(
                 dep.startswith(substring) for substring in third_party_target_allowlist)):
             dep_info = build_info[abi][dep]
             blueprint_dep_name = gn_target_to_blueprint_target(dep, dep_info)
+
+            host_dep = "build_toolchain_linux" in blueprint_dep_name
+            if (host_dep and not host_target) or (not host_dep and host_target):
+                continue
 
             # Depending on the dep type, blueprints reference it differently.
             gn_dep_type = dep_info['type']
@@ -316,6 +329,12 @@ def gn_deps_to_blueprint_deps(abi, target, build_info):
 
     return static_libs, shared_libs, defaults, generated_headers, header_libs
 
+def gn_libs_to_blueprint_ldlibs(target_info):
+    result = []
+    if 'libs' in target_info:
+        for lib in target_info['libs']:
+            result.append('-l' + lib)
+    return result
 
 def gn_libs_to_blueprint_shared_libraries(target_info):
     lib_blockist = [
@@ -326,7 +345,7 @@ def gn_libs_to_blueprint_shared_libraries(target_info):
     result = []
     if 'libs' in target_info:
         for lib in target_info['libs']:
-            if lib not in lib_blockist and not lib.startswith('//'):
+            if lib not in lib_blockist and not lib.startswith('//') and not "(" in lib:
                 android_lib = lib if '@' in lib else 'lib' + lib
                 result.append(android_lib)
     return result
@@ -376,6 +395,7 @@ blueprint_library_target_types = {
     "shared_library": "cc_library_shared",
     "source_set": "cc_defaults",
     "group": "cc_defaults",
+    "executable": "cc_binary",
 }
 
 
@@ -417,6 +437,8 @@ def library_target_to_blueprint(target, build_info):
 
         blueprint_type = blueprint_library_target_types[target_info['type']]
 
+        host_target = '(' in target
+
         bp = {'name': gn_target_to_blueprint_target(target, target_info)}
 
         if 'sources' in target_info:
@@ -424,7 +446,16 @@ def library_target_to_blueprint(target, build_info):
 
         (bp['static_libs'], bp['shared_libs'], bp['defaults'], bp['generated_headers'],
          bp['header_libs']) = gn_deps_to_blueprint_deps(abi, target, build_info)
-        bp['shared_libs'] += gn_libs_to_blueprint_shared_libraries(target_info)
+        if host_target:
+            # bp['host_ldlibs'] = gn_libs_to_blueprint_ldlibs(target_info)
+            bp['host_supported'] = True
+            bp['target'] = {'android': {'enabled': False}}
+        else:
+            bp['shared_libs'] += gn_libs_to_blueprint_shared_libraries(target_info)
+
+            bp['sdk_version'] = CURRENT_SDK_VERSION
+
+            bp['stl'] = STL
 
         bp['local_include_dirs'] = gn_include_dirs_to_blueprint_include_dirs(target_info)
 
@@ -432,9 +463,6 @@ def library_target_to_blueprint(target, build_info):
 
         bp['defaults'].append('angle_common_library_cflags')
 
-        bp['sdk_version'] = CURRENT_SDK_VERSION
-
-        bp['stl'] = STL
         if target in ROOT_TARGETS:
             bp['defaults'].append('angle_vendor_cc_defaults')
             bp['defaults'].append('angle_dma_buf_cc_defaults')
@@ -526,6 +554,8 @@ def action_target_to_blueprint(abi, target, build_info):
 
     bp = {'name': gn_target_to_blueprint_target(target, target_info)}
 
+    host_target = '(' in target
+
     # Blueprints use only one 'srcs', merge all gn inputs into one list.
     gn_inputs = []
     if 'inputs' in target_info:
@@ -572,7 +602,11 @@ def action_target_to_blueprint(abi, target, build_info):
 
     bp['cmd'] = ' '.join(cmd)
 
-    bp['sdk_version'] = CURRENT_SDK_VERSION
+    if host_target:
+        bp['host_supported'] = True
+        bp['target'] = {'android': {'enabled': False}}
+    else:
+        bp['sdk_version'] = CURRENT_SDK_VERSION
 
     return blueprint_type, bp
 

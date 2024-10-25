@@ -1844,6 +1844,11 @@ group("angle") {
       ":libEGL_vulkan_secondaries",
       ":libGLESv2_vulkan_secondaries",
     ]
+    if (angle_enable_cl) {
+      data_deps += [
+        "//third_party/clvk/src:OpenCL",
+      ]
+    }
   }
   if (is_ios) {
     # Need to bundle the libraries inside the .app.
