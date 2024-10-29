@@ -20,6 +20,7 @@ ROOT_TARGETS = [
     "//:libGLESv2",
     "//:libGLESv1_CM",
     "//:libEGL",
+    "//third_party/clvk:clvk",
 ]
 
 END2END_TEST_TARGET = "//src/tests:angle_end2end_tests__library"

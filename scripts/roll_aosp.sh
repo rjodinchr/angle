@@ -59,6 +59,7 @@ function generate_Android_bp_file() {
             "angle_enable_null = false"
             "angle_enable_metal = false"
             "angle_enable_wgpu = false"
+            "angle_enable_clvk = \"$abi\" == \"x64\" || \"abi\" == \"arm64\""
 
             # SwiftShader is loaded as the system Vulkan driver on Android, not compiled by ANGLE
             "angle_enable_swiftshader = false"

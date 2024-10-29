@@ -1836,6 +1836,9 @@ group("angle") {
     ":libGLESv1_CM",
     ":libGLESv2",
   ]
+  if (angle_enable_clvk) {
+    data_deps += [ "$angle_root/third_party/clvk" ]
+  }
   if (angle_enable_vulkan) {
     data_deps += [
       ":libEGL_vulkan_secondaries",
